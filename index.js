@@ -5,6 +5,13 @@ const cors = require('cors');
 const jwt = require('jsonwebtoken');
 require('dotenv').config();
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+const formData = require('form-data');
+const Mailgun = require('mailgun.js');
+const mailgun = new Mailgun(formData);
+const mg = mailgun.client({
+    username: 'api',
+    key: process.env.MAIL_GUN_API_KEY,
+});
 
 const port = process.env.PORT || 5000;
 
@@ -28,7 +35,7 @@ const client = new MongoClient(uri, {
 async function run() {
     try {
         // Connect the client to the server	(optional starting in v4.7)
-        await client.connect();
+        // await client.connect();
 
 
         const cartCollection = client.db("E-learning-web").collection("cart");
@@ -62,7 +69,6 @@ async function run() {
                 next();
             })
         }
-
 
         // use verify admin after verifyToken
         const verifyAdmin = async (req, res, next) => {
@@ -214,6 +220,25 @@ async function run() {
 
             const deleteResult = await addtocartCollection.deleteMany(query);
 
+            // send user email about payment confirmation
+            mg.messages
+                .create(process.env.MAIL_SENDING_DOMAIN, {
+                    from: "Mailgun Sandbox <postmaster@sandboxf8fc0ddfe91046e9a95a76f4b782a84e.mailgun.org>",
+                    to: ["asafayet21@gmail.com"],
+                    subject: "Bistro Boss Order Confirmation",
+                    text: "Testing some Mailgun awesomness!",
+                    html: `
+                    <div>
+                    <h2>Thank you for your order</h2>
+                    <h4>Your Transaction Id: <strong>${payment.transactionId}</strong></h4>
+                    <p>Wee would like to get your feedback about the food</p>
+                    </div>
+                    `
+                })
+                .then(msg => console.log(msg)) // logs response data
+                .catch(err => console.log(err)); // logs any error`;
+
+
             res.send({ paymentResult, deleteResult });
         });
 
@@ -297,7 +322,7 @@ async function run() {
         app.get('/order-stats', verifyToken, verifyAdmin, async (req, res) => {
             const result = await paymentCollection.aggregate([
                 {
-                   $unwind: '$menuItemIds' 
+                    $unwind: '$menuItemIds'
                 },
                 {
                     $lookup: {
@@ -313,8 +338,8 @@ async function run() {
                 {
                     $group: {
                         _id: '$menuItems.category',
-                        quantity:{$sum: 1},
-                        revenue: {$sum: '$menuItems.price'}
+                        quantity: { $sum: 1 },
+                        revenue: { $sum: '$menuItems.price' }
                     }
                 },
                 {
@@ -332,8 +357,8 @@ async function run() {
 
 
         // Send a ping to confirm a successful connection
-        await client.db("admin").command({ ping: 1 });
-        console.log("Pinged your deployment. You successfully connected to MongoDB!");
+        // await client.db("admin").command({ ping: 1 });
+        // console.log("Pinged your deployment. You successfully connected to MongoDB!");
     } finally {
         // Ensures that the client will close when you finish/error
         // await client.close();
